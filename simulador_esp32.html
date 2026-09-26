@@ -114,20 +114,22 @@
         <h2>📟 Monitor Serie ESP32 y Nube</h2>
         <div class="log-box" id="consoleLog">
           <div class="log-line">
-            <span class="log-time">[Sistema]</span> Simulador iniciado. Servidor destino: <code>http://localhost:8000/api/telemetria/ingesta_esp32/</code>
+            <span class="log-time">[Sistema]</span> Simulador conectado a la Nube Render: <code>https://aquabrain-backend.onrender.com/api/telemetria/ingesta_esp32/</code>
           </div>
         </div>
 
         <div class="links-bar">
-          <a class="link-btn" href="http://localhost:8000/admin/" target="_blank">🔐 Ver en Django Admin</a>
-          <a class="link-btn" href="https://console.neon.tech" target="_blank">☁️ Ver Tablas en Neon</a>
+          <a class="link-btn" href="https://aquabrain-backend.onrender.com/admin/" target="_blank">🌐 Django Admin en la Nube (Render)</a>
+          <a class="link-btn" href="https://console.neon.tech" target="_blank">☁️ Tablas en Neon</a>
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    const API_URL = "http://localhost:8000/api/telemetria/ingesta_esp32/";
+    const CLOUD_URL = "https://aquabrain-backend.onrender.com/api/telemetria/ingesta_esp32/";
+    const LOCAL_URL = "http://localhost:8000/api/telemetria/ingesta_esp32/";
+    let API_URL = CLOUD_URL;
     const DEVICE_ID = "ESP32-S3-AQUA-01";
     let autoInterval = null;
 
