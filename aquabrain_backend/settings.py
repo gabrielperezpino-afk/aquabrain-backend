@@ -56,6 +56,13 @@ MIDDLEWARE = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+}
+
 ROOT_URLCONF = 'aquabrain_backend.urls'
 
 TEMPLATES = [
@@ -76,21 +83,32 @@ TEMPLATES = [
 WSGI_APPLICATION = 'aquabrain_backend.wsgi.application'
 
 
-# Database - Neon.tech PostgreSQL en la Nube
+# Database - Neon.tech PostgreSQL en la Nube (o SQLite local de respaldo)
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 import os
 import dj_database_url
 
-DEFAULT_DATABASE_URL = 'postgresql://neondb_owner:npg_9U6litEjYNQg@ep-snowy-frost-b6qtea62-pooler.c-2.sa-east-1.aws.neon.tech/neondb?sslmode=require'
+# Cargar variables de entorno desde .env local si existe (desarrollo local)
+_env_path = BASE_DIR / '.env'
+if _env_path.exists():
+    with open(_env_path, 'r', encoding='utf-8') as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _k, _v = _line.split('=', 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
+DEFAULT_DATABASE_URL = f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
 DATABASE_URL = os.environ.get('DATABASE_URL', DEFAULT_DATABASE_URL)
 
 DATABASES = {
     'default': dj_database_url.config(
         default=DATABASE_URL,
         conn_max_age=0,
-        ssl_require=True
+        ssl_require=True if 'postgresql' in DATABASE_URL else False
     )
 }
+
 
 
 # Password validation
