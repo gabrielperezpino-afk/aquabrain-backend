@@ -1,168 +1,261 @@
-"""
-=============================================================================
- AQUABRAIN 2026 — SIMULADOR DE MICROCONTROLADOR ARDUINO / ESP32-S3
-=============================================================================
-Este script emula exactamente el comportamiento del firmware C++ (main.cpp):
-1. Simula las lecturas analógicas y digitales de los sensores de hardware:
-   - Sensor de Temperatura y Humedad Ambiental (AHT10 / DHT22)
-   - Sensor Ultrasónico de Nivel Hídrico del Estanque (HC-SR04)
-   - Relé Actuador de la Bomba de Alta Presión (GPIO 23)
-2. Empaqueta los datos en tramas JSON compactas (< 500 ms según RNF05).
-3. Transmite las peticiones HTTP POST reales vía red hacia el servidor Django.
-4. El servidor Django procesa y almacena los datos en la nube de Neon (PostgreSQL).
-=============================================================================
-"""
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AquaBrain 2026 — Simulador Virtual ESP32 / Arduino</title>
+  <style>
+    :root {
+      --bg: #0b1310;
+      --card: #13221c;
+      --primary: #10b981;
+      --primary-hover: #059669;
+      --text: #ecfdf5;
+      --muted: #6ee7b7;
+      --border: rgba(16, 185, 129, 0.25);
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --dark-card: #091712;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 24px; min-height: 100vh; }
+    .container { max-width: 900px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 24px; }
+    h1 { font-size: 1.8rem; color: var(--primary); display: flex; align-items: center; justify-content: center; gap: 10px; }
+    p.subtitle { color: #9ca3af; font-size: 0.95rem; margin-top: 6px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media(max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    h2 { font-size: 1.15rem; color: #a7f3d0; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .control-group { margin-bottom: 16px; }
+    .label-row { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 6px; font-weight: 600; }
+    input[type=range] { width: 100%; accent-color: var(--primary); height: 6px; border-radius: 3px; cursor: pointer; }
+    .val-badge { background: #064e3b; color: #6ee7b7; padding: 2px 8px; border-radius: 6px; font-size: 0.85rem; }
+    .badge-danger { background: #7f1d1d !important; color: #fca5a5 !important; }
+    .badge-warning { background: #78350f !important; color: #fde68a !important; }
+    .status-box { background: var(--dark-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 0.88rem; }
+    .btn-row { display: flex; gap: 10px; margin-top: 18px; }
+    button { flex: 1; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-size: 0.92rem; }
+    .btn-primary { background: var(--primary); color: #064e3b; }
+    .btn-primary:hover { background: var(--primary-hover); color: white; }
+    .btn-auto { background: #2563eb; color: white; }
+    .btn-auto.active { background: #dc2626; }
+    .btn-danger { background: #b91c1c; color: white; }
+    .log-box { background: #050d0a; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 12px; font-family: monospace; font-size: 0.82rem; height: 320px; overflow-y: auto; color: #a7f3d0; }
+    .log-line { margin-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,0.06); padding-bottom: 4px; }
+    .log-time { color: #6b7280; }
+    .links-bar { margin-top: 20px; display: flex; gap: 12px; justify-content: center; }
+    .link-btn { background: #1e293b; color: #38bdf8; text-decoration: none; padding: 8px 16px; border-radius: 6px; font-size: 0.85rem; border: 1px solid #334155; }
+    .link-btn:hover { background: #334155; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🌱 AquaBrain 2026 — Banco de Pruebas ESP32 Virtual</h1>
+      <p class="subtitle">Emulador interactivo de hardware en tiempo real con transmisión HTTP REST a Django y Neon PostgreSQL</p>
+    </header>
 
-import urllib.request
-import json
-import time
-import random
-import sys
+    <div class="grid">
+      <!-- PANEL DE SENSORES HARDWARE -->
+      <div class="card">
+        <h2>🎛️ Sensores de Hardware (ESP32-S3)</h2>
+        
+        <div class="control-group">
+          <div class="label-row">
+            <span>🌡️ Sensor AHT10 / DHT22 (Temperatura)</span>
+            <span class="val-badge" id="tempVal">23.5 °C</span>
+          </div>
+          <input type="range" id="tempRange" min="10" max="45" step="0.1" value="23.5" oninput="actualizarValores()">
+        </div>
 
-API_URL = "http://localhost:8000/api/telemetria/ingesta_esp32/"
-DEVICE_ID = "ESP32-S3-AQUA-01"
+        <div class="control-group">
+          <div class="label-row">
+            <span>💧 Sensor AHT10 (Humedad Relativa)</span>
+            <span class="val-badge" id="humVal">68.0 %</span>
+          </div>
+          <input type="range" id="humRange" min="20" max="99" step="0.5" value="68.0" oninput="actualizarValores()">
+        </div>
 
-def enviar_paquete_al_servidor(temperatura, humedad, nivel_agua, bomba_activa):
-    payload = {
-        "esp32_device_id": DEVICE_ID,
-        "temperatura": round(temperatura, 1),
-        "humedad": round(humedad, 1),
-        "nivel_agua": int(nivel_agua),
-        "bomba_activa": bool(bomba_activa)
+        <div class="control-group">
+          <div class="label-row">
+            <span>🌊 Sensor Ultrasónico HC-SR04 (Nivel Estanque)</span>
+            <span class="val-badge" id="waterVal">85 %</span>
+          </div>
+          <input type="range" id="waterRange" min="0" max="100" step="1" value="85" oninput="actualizarValores()">
+        </div>
+
+        <div class="control-group">
+          <div class="label-row">
+            <span>⚡ Actuador: Bomba Aeropónica (GPIO 23)</span>
+            <label style="cursor:pointer; display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="pumpCheck" checked onchange="actualizarValores()">
+              <span id="pumpStatus" style="color: #6ee7b7;">Encendida</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="status-box" id="hardwareStatus">
+          <strong>Estado Detectado:</strong> <span id="statusTag" style="color:#10b981;">WATER_OK (Nivel Adecuado)</span><br>
+          <small id="statusDesc">Bomba habilitada. Ciclo de pulverización normal.</small>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-primary" onclick="enviarLecturaManual()">📡 Enviar Lectura a Neon</button>
+          <button class="btn-auto" id="btnAuto" onclick="toggleAuto()">▶️ Modo Automático (5s)</button>
+        </div>
+        <div style="margin-top: 10px;">
+          <button class="btn-danger" style="width: 100%;" onclick="simularEstanqueVacio()">⚠️ Simular Alerta Tanque Vacío (3%)</button>
+        </div>
+      </div>
+
+      <!-- PANEL DE CONSOLA Y TELEMETRÍA -->
+      <div class="card">
+        <h2>📟 Monitor Serie ESP32 y Nube</h2>
+        <div class="log-box" id="consoleLog">
+          <div class="log-line">
+            <span class="log-time">[Sistema]</span> Simulador conectado a la Nube Render: <code>https://aquabrain-backend.onrender.com/api/telemetria/ingesta_esp32/</code>
+          </div>
+        </div>
+
+        <div class="links-bar">
+          <a class="link-btn" href="https://aquabrain-backend.onrender.com/admin/" target="_blank">🌐 Django Admin en la Nube (Render)</a>
+          <a class="link-btn" href="https://console.neon.tech" target="_blank">☁️ Tablas en Neon</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CLOUD_URL = "https://aquabrain-backend.onrender.com/api/telemetria/ingesta_esp32/";
+    const LOCAL_URL = "http://localhost:8000/api/telemetria/ingesta_esp32/";
+    let API_URL = CLOUD_URL;
+    const DEVICE_ID = "ESP32-S3-AQUA-01";
+    let autoInterval = null;
+
+    function log(msg, color = "#a7f3d0") {
+      const box = document.getElementById('consoleLog');
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = 'log-line';
+      div.innerHTML = `<span class="log-time">[${time}]</span> <span style="color: ${color}">${msg}</span>`;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
     }
 
-    data = json.dumps(payload).encode('utf-8')
-    req = urllib.request.Request(
-        API_URL,
-        data=data,
-        headers={"Content-Type": "application/json", "User-Agent": "ESP32-AquaBrain-Firmware/2.0"}
-    )
+    function actualizarValores() {
+      const t = parseFloat(document.getElementById('tempRange').value).toFixed(1);
+      const h = parseFloat(document.getElementById('humRange').value).toFixed(1);
+      const w = parseInt(document.getElementById('waterRange').value);
+      const pump = document.getElementById('pumpCheck').checked;
 
-    t_inicio = time.time()
-    try:
-        with urllib.request.urlopen(req, timeout=5) as response:
-            t_ms = int((time.time() - t_inicio) * 1000)
-            res_body = json.loads(response.read().decode('utf-8'))
-            return True, t_ms, res_body
-    except Exception as e:
-        t_ms = int((time.time() - t_inicio) * 1000)
-        return False, t_ms, str(e)
+      document.getElementById('tempVal').innerText = t + " °C";
+      document.getElementById('humVal').innerText = h + " %";
+      document.getElementById('waterVal').innerText = w + " %";
 
+      const badge = document.getElementById('waterVal');
+      const tag = document.getElementById('statusTag');
+      const desc = document.getElementById('statusDesc');
 
-def modo_continuo():
-    print("\n" + "="*70)
-    print(" INICIANDO TRANSMISIÓN CONTINUA DEL ESP32 HACIA LA NUBE NEON")
-    print(" (Presiona Ctrl + C en cualquier momento para detener)")
-    print("="*70)
+      badge.className = 'val-badge';
+      if (w <= 5) {
+        badge.classList.add('badge-danger');
+        tag.innerText = 'WATER_EMPTY (Estanque Vacío <= 5%)';
+        tag.style.color = '#ef4444';
+        desc.innerText = '⚠️ BLOQUEO PREVENTIVO: La bomba se forzará a apagarse para evitar daño mecánico.';
+        document.getElementById('pumpCheck').checked = false;
+        document.getElementById('pumpStatus').innerText = 'APAGADA POR SEGURIDAD';
+        document.getElementById('pumpStatus').style.color = '#ef4444';
+      } else if (w <= 10) {
+        badge.classList.add('badge-warning');
+        tag.innerText = 'WATER_LOW (Nivel Bajo <= 10%)';
+        tag.style.color = '#f59e0b';
+        desc.innerText = 'Alerta de recarga de solución nutritiva requerida pronto.';
+        document.getElementById('pumpStatus').innerText = pump ? 'Encendida' : 'Apagada';
+        document.getElementById('pumpStatus').style.color = pump ? '#6ee7b7' : '#9ca3af';
+      } else {
+        tag.innerText = 'WATER_OK (Nivel Adecuado > 10%)';
+        tag.style.color = '#10b981';
+        desc.innerText = 'Nivel hídrico en parámetros óptimos para aeroponía.';
+        document.getElementById('pumpStatus').innerText = pump ? 'Encendida' : 'Apagada';
+        document.getElementById('pumpStatus').style.color = pump ? '#6ee7b7' : '#9ca3af';
+      }
+    }
 
-    # Valores iniciales realistas para aeroponía
-    nivel_estanque = 92
-    ciclo = 1
+    async function enviarLectura(t, h, w, bomba) {
+      log(`📡 ESP32 enviando POST: T=${t}°C, H=${h}%, Agua=${w}%, Bomba=${bomba ? 'ON' : 'OFF'}...`);
+      const t0 = performance.now();
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          credentials: 'omit',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            esp32_device_id: DEVICE_ID,
+            temperatura: parseFloat(t),
+            humedad: parseFloat(h),
+            nivel_agua: parseInt(w),
+            bomba_activa: Boolean(bomba)
+          })
+        });
 
-    try:
-        while True:
-            # Simular fluctuaciones naturales del invernadero
-            temp = 22.0 + random.uniform(-1.5, 2.0)
-            hum = 68.0 + random.uniform(-4.0, 5.0)
+        const ms = Math.round(performance.now() - t0);
+        if (response.ok) {
+          const json = await response.json();
+          const d = json.data;
+          log(`✅ HTTP 201 Created (${ms} ms) -> Guardado en Neon ID: #${d.id} | VPD: ${d.vpd} kPa | Estado: ${d.estado_agua}`, "#34d399");
+        } else {
+          const err = await response.text();
+          log(`❌ Error HTTP ${response.status}: ${err}`, "#f87171");
+        }
+      } catch (e) {
+        log(`❌ Error de conexión: ¿Está corriendo Django en el puerto 8000?`, "#f87171");
+      }
+    }
 
-            # Las plantas van consumiendo agua lentamente
-            if ciclo % 3 == 0 and nivel_estanque > 8:
-                nivel_estanque -= 1
+    function enviarLecturaManual() {
+      const t = document.getElementById('tempRange').value;
+      const h = document.getElementById('humRange').value;
+      const w = document.getElementById('waterRange').value;
+      const bomba = document.getElementById('pumpCheck').checked;
+      enviarLectura(t, h, w, bomba);
+    }
 
-            # Máquina de estados de la bomba
-            if nivel_estanque <= 5:
-                estado_hídrico = "CRÍTICO - VACÍO (WATER_EMPTY)"
-                bomba = False
-                color_alerta = " [!] BLOQUEO DE HARDWARE: BOMBA APAGADA POR SEGURIDAD"
-            elif nivel_estanque <= 10:
-                estado_hídrico = "BAJO (WATER_LOW)"
-                bomba = (ciclo % 2 == 1)
-                color_alerta = " [?] ALERTA AMARILLA: Rellenar solución nutritiva"
-            else:
-                estado_hídrico = "ADECUADO (WATER_OK)"
-                bomba = (ciclo % 2 == 1)
-                color_alerta = " [OK] Ciclo de riego activo"
+    function simularEstanqueVacio() {
+      document.getElementById('waterRange').value = 3;
+      actualizarValores();
+      enviarLecturaManual();
+    }
 
-            print(f"\n--- [TRAMA #{ciclo:03d}] ESP32 Serial Monitor (115200 baud) ---")
-            print(f"📡 Dispositivo: {DEVICE_ID} | Wi-Fi: Conectado (RSSI: -58 dBm)")
-            print(f"🌡️  Sensor AHT:       Temp = {temp:.1f} °C  |  Humedad = {hum:.1f} %")
-            print(f"🌊 Sensor HC-SR04:   Estanque = {nivel_estanque}%  -> {estado_hídrico}")
-            print(f"⚡ Relé Bomba (G23): {'ENCENDIDA (Pulverizando)' if bomba else 'APAGADA (Descanso)'}{color_alerta}")
+    function toggleAuto() {
+      const btn = document.getElementById('btnAuto');
+      if (autoInterval) {
+        clearInterval(autoInterval);
+        autoInterval = null;
+        btn.innerText = "▶️ Modo Automático (5s)";
+        btn.classList.remove('active');
+        log("⏹️ Transmisión automática detenida.");
+      } else {
+        btn.innerText = "⏹️ Detener Auto";
+        btn.classList.add('active');
+        log("▶️ Transmisión automática iniciada cada 5 segundos.");
+        autoInterval = setInterval(() => {
+          // Fluctuaciones suaves aleatorias
+          let t = (22.5 + (Math.random() * 2 - 1)).toFixed(1);
+          let h = (68.0 + (Math.random() * 4 - 2)).toFixed(1);
+          let w = parseInt(document.getElementById('waterRange').value);
+          if (w > 5 && Math.random() > 0.6) w -= 1; // El agua baja gradualmente
+          document.getElementById('tempRange').value = t;
+          document.getElementById('humRange').value = h;
+          document.getElementById('waterRange').value = w;
+          actualizarValores();
+          const bomba = document.getElementById('pumpCheck').checked;
+          enviarLectura(t, h, w, bomba);
+        }, 5000);
+      }
+    }
 
-            # Transmitir por HTTP
-            print(f"🚀 Transmitiendo POST a {API_URL} ...")
-            exito, latencia_ms, respuesta = enviar_paquete_al_servidor(temp, hum, nivel_estanque, bomba)
-
-            if exito:
-                data_db = respuesta.get('data', {})
-                print(f"✅ [HTTP 201 CREATED] Recibido ACK en {latencia_ms} ms (SLA < 500ms Cumplido)")
-                print(f"💾 Guardado en Neon PostgreSQL -> ID en Nube: {data_db.get('id')} | VPD: {data_db.get('vpd')} kPa | Estado: {data_db.get('estado_agua')}")
-            else:
-                print(f"❌ Error al transmitir: {respuesta}")
-
-            print(f"⏱️  Esperando 5 segundos para siguiente lectura...")
-            time.sleep(5)
-            ciclo += 1
-
-    except KeyboardInterrupt:
-        print("\n\n[ESP32] Simulación detenida por el usuario.")
-
-
-def modo_alerta_vacio():
-    print("\n" + "="*70)
-    print(" SIMULANDO CONTINGENCIA: ESTANQUE VACÍO (<= 5%)")
-    print("="*70)
-    print("Simulando que el estanque cayó al 3% de agua...")
-    exito, latencia_ms, respuesta = enviar_paquete_al_servidor(23.5, 62.0, 3, False)
-    if exito:
-        print(f"✅ Alerta transmitida con éxito en {latencia_ms} ms!")
-        print(f"💾 Registro en Neon: {respuesta}")
-        print("💡 Verifica en tu tabla 'api_telemetria' y 'api_auditoria' en Neon;")
-        print("   verás la alerta crítica generada automáticamente.")
-    else:
-        print(f"❌ Error: {respuesta}")
-
-
-def menu():
-    print("\n" + "="*60)
-    print("       AQUABRAIN 2026 — SIMULADOR VIRTUAL ARDUINO/ESP32    ")
-    print("="*60)
-    print(" 1) Iniciar transmisión continua cada 5 segundos (Auto)")
-    print(" 2) Simular 1 lectura normal (Nivel 85%)")
-    print(" 3) Simular alerta de estanque vacío (Nivel 3% - WATER_EMPTY)")
-    print(" 4) Ingresar datos manuales personalizados")
-    print(" 5) Salir")
-    print("="*60)
-
-    opcion = input("Selecciona una opción (1-5): ").strip()
-
-    if opcion == "1":
-        modo_continuo()
-    elif opcion == "2":
-        exito, ms, res = enviar_paquete_al_servidor(22.8, 68.0, 85, True)
-        print(f"\nRespuesta del servidor ({ms} ms):", res)
-    elif opcion == "3":
-        modo_alerta_vacio()
-    elif opcion == "4":
-        try:
-            t = float(input("Temperatura (°C): "))
-            h = float(input("Humedad (%): "))
-            n = int(input("Nivel de agua (0-100%): "))
-            b = input("¿Bomba encendida? (s/n): ").lower() == 's'
-            exito, ms, res = enviar_paquete_al_servidor(t, h, n, b)
-            print(f"\nRespuesta del servidor ({ms} ms):", res)
-        except Exception as e:
-            print("Error en los datos:", e)
-    elif opcion == "5":
-        print("Saliendo...")
-    else:
-        print("Opción no válida.")
-
-if __name__ == '__main__':
-    if len(sys.argv) > 1 and sys.argv[1] == '--auto':
-        modo_continuo()
-    elif len(sys.argv) > 1 and sys.argv[1] == '--single':
-        exito, ms, res = enviar_paquete_al_servidor(23.1, 67.2, 86, True)
-        print(f"Resultado ({ms} ms):", res)
-    else:
-        menu()
+    actualizarValores();
+  </script>
+</body>
+</html>
