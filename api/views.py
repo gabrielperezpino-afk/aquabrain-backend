@@ -75,7 +75,7 @@ class TelemetriaViewSet(viewsets.ModelViewSet):
 
         return qs
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], authentication_classes=[], permission_classes=[])
     def ingesta_esp32(self, request):
         """
         Endpoint directo para microcontroladores ESP32 (POST /api/telemetria/ingesta_esp32/)
